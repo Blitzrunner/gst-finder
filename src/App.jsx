@@ -1,0 +1,206 @@
+import React, { useState, useRef } from "react";
+import { Search, Upload, Clock, Check, Copy, Trash2, FileDown, Loader2, ChevronRight, IndianRupee } from "lucide-react";
+
+async function classify(description) {
+  try {
+    const res = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    });
+    if (!res.ok) throw new Error(`Server ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    return {
+      code: "—", type: "SAC", rate: 18,
+      label: "Lookup unavailable",
+      note: "Could not reach the classifier. Please try again in a moment.",
+      confidence: "Low",
+    };
+  }
+}
+
+const C = {
+  ink: "#14241b", paper: "#FBFAF6", card: "#FFFFFF", line: "#E3E0D5",
+  green: "#1F6B4C", greenSoft: "#E7F1EC", amber: "#B5742A", amberSoft: "#F6ECDD", mute: "#6B7167",
+};
+
+function RateBadge({ rate }) {
+  const color = rate === 0 ? C.green : rate >= 28 ? C.amber : C.ink;
+  const bg = rate === 0 ? C.greenSoft : rate >= 28 ? C.amberSoft : "#F0EFEA";
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, background: bg, color, fontWeight: 700, fontSize: 13, padding: "3px 9px", borderRadius: 6, fontVariantNumeric: "tabular-nums" }}>
+      {rate}% GST
+    </span>
+  );
+}
+
+function ResultCard({ r, onCopy, copied }) {
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.card, overflow: "hidden" }}>
+      <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 12, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 4 }}>{r.type} Code</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: 30, fontWeight: 600, color: C.ink, lineHeight: 1 }}>{r.code}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <RateBadge rate={r.rate} />
+          <span style={{ fontSize: 11, color: r.confidence === "High" ? C.green : C.amber, fontWeight: 600 }}>{r.confidence} confidence</span>
+        </div>
+      </div>
+      <div style={{ padding: "14px 18px" }}>
+        <div style={{ fontSize: 15, color: C.ink, fontWeight: 600, marginBottom: 6 }}>{r.label}</div>
+        <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>{r.note}</div>
+        <button onClick={() => onCopy(`${r.type} ${r.code} · ${r.rate}% GST · ${r.label}`)}
+          style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6, background: copied ? C.greenSoft : "transparent", color: copied ? C.green : C.ink, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? "Copied" : "Copy result"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [tab, setTab] = useState("single");
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [bulkRows, setBulkRows] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const fileRef = useRef(null);
+
+  const pushHistory = (q, r) =>
+    setHistory((h) => [{ id: Date.now() + Math.random(), q, r, t: new Date() }, ...h].slice(0, 50));
+
+  async function runSingle(q) {
+    const term = (q ?? query).trim();
+    if (!term) return;
+    setLoading(true); setResult(null); setCopied(false);
+    const r = await classify(term);
+    setResult(r); pushHistory(term, r); setLoading(false);
+  }
+
+  function handleCopy(text) {
+    navigator.clipboard?.writeText(text);
+    setCopied(true); setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const items = lines.map((l) => l.split(",")[0].trim()).filter(Boolean);
+    if (items.length && /desc|item|product|name/i.test(items[0])) items.shift();
+    setBulkLoading(true); setBulkRows([]);
+    const out = [];
+    for (const it of items.slice(0, 200)) {
+      const r = await classify(it);
+      out.push({ desc: it, ...r });
+      setBulkRows([...out]);
+    }
+    setBulkLoading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function loadSample() {
+    const sample = "Description\nAnnual software subscription\nVehicle yard parking charges\nNew truck tyres\nManagement consulting retainer\nOffice space monthly rent";
+    const blob = new Blob([sample], { type: "text/csv" });
+    const f = new File([blob], "sample.csv", { type: "text/csv" });
+    handleFile({ target: { files: [f] } });
+  }
+
+  function exportCsv() {
+    const head = "Description,Type,Code,GST Rate %,Label\n";
+    const body = bulkRows.map((r) => `"${r.desc}",${r.type},${r.code},${r.rate},"${r.label}"`).join("\n");
+    const blob = new Blob([head + body], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "gst-sac-results.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const examples = ["Annual software subscription", "Vehicle yard parking charges", "New truck tyres", "Management consulting retainer"];
+
+  const tabBtn = (id, icon, label) => (
+    <button onClick={() => setTab(id)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 15px", fontSize: 14, fontWeight: 600, color: tab === id ? C.ink : C.mute, background: tab === id ? C.card : "transparent", border: tab === id ? `1px solid ${C.line}` : "1px solid transparent", borderBottom: tab === id ? `1px solid ${C.card}` : "1px solid transparent", borderRadius: "10px 10px 0 0", cursor: "pointer", marginBottom: -1 }}>
+      {icon} {label}
+    </button>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.paper, fontFamily: "'Inter', system-ui, sans-serif", color: C.ink }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+        *{box-sizing:border-box} body{margin:0} input::placeholder{color:#A7AB9F}
+        button:focus-visible,input:focus-visible{outline:2px solid ${C.green};outline-offset:2px}
+        .spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 20px 64px" }}>
+        <header style={{ marginBottom: 26 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.greenSoft, color: C.green, fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, letterSpacing: 0.3 }}>
+            <IndianRupee size={13} /> GST / HSN / SAC Finder
+          </div>
+          <h1 style={{ fontSize: 30, fontWeight: 700, margin: "14px 0 6px", lineHeight: 1.15 }}>Describe it. Get the right tax code.</h1>
+          <p style={{ fontSize: 15, color: C.mute, margin: 0, maxWidth: 520, lineHeight: 1.5 }}>Type any product or service in plain English and get its HSN/SAC code, GST rate, and rationale. Upload a CSV to classify hundreds at once.</p>
+        </header>
+
+        <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${C.line}` }}>
+          {tabBtn("single", <Search size={15} />, "Single lookup")}
+          {tabBtn("bulk", <Upload size={15} />, "Bulk CSV")}
+          {tabBtn("history", <Clock size={15} />, `History${history.length ? ` (${history.length})` : ""}`)}
+        </div>
+
+        <div style={{ border: `1px solid ${C.line}`, borderTop: "none", borderRadius: "0 0 16px 16px", background: C.paper, padding: 20 }}>
+          {tab === "single" && (
+            <div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <Search size={18} style={{ position: "absolute", left: 13, top: 13, color: C.mute }} />
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSingle()}
+                    placeholder="e.g. annual software subscription"
+                    style={{ width: "100%", padding: "12px 14px 12px 40px", fontSize: 15, border: `1px solid ${C.line}`, borderRadius: 10, background: C.card, color: C.ink }} />
+                </div>
+                <button onClick={() => runSingle()} disabled={loading || !query.trim()}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "0 18px", fontSize: 14.5, fontWeight: 600, color: "#fff", background: query.trim() ? C.green : "#A7AB9F", border: "none", borderRadius: 10, cursor: query.trim() ? "pointer" : "default" }}>
+                  {loading ? <Loader2 size={16} className="spin" /> : <ChevronRight size={16} />} Find
+                </button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+                {examples.map((ex) => (
+                  <button key={ex} onClick={() => { setQuery(ex); runSingle(ex); }}
+                    style={{ fontSize: 12.5, color: C.mute, background: C.card, border: `1px solid ${C.line}`, borderRadius: 20, padding: "5px 11px", cursor: "pointer" }}>{ex}</button>
+                ))}
+              </div>
+              <div style={{ marginTop: 18 }}>
+                {loading && <div style={{ display: "flex", alignItems: "center", gap: 10, color: C.mute, fontSize: 14, padding: "18px 4px" }}><Loader2 size={16} className="spin" /> Classifying…</div>}
+                {result && !loading && <ResultCard r={result} onCopy={handleCopy} copied={copied} />}
+              </div>
+            </div>
+          )}
+
+          {tab === "bulk" && (
+            <div>
+              <div style={{ border: `1.5px dashed ${C.line}`, borderRadius: 12, padding: 22, textAlign: "center", background: C.card }}>
+                <Upload size={22} style={{ color: C.green }} />
+                <div style={{ fontSize: 14.5, fontWeight: 600, marginTop: 8 }}>Upload a CSV of descriptions</div>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3 }}>First column = item/service description. Up to 200 rows.</div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+                  <button onClick={() => fileRef.current?.click()}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 15px", fontSize: 14, fontWeight: 600, color: "#fff", background: C.green, border: "none", borderRadius: 9, cursor: "pointer" }}><Upload size={15} /> Choose CSV</button>
+                  <button onClick={loadSample}
+                    style={{ padding: "9px 15px", fontSize: 14, fontWeight: 600, color: C.ink, background: "transparent", border: `1px solid ${C.line}`, borderRadius: 9, cursor: "pointer" }}>Try sample data</button>
+                  <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: "none" }} />
+                </div>
+              </div>
+              {(bulkRows.length > 0 || bulkLoading) && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: C.mute }}>
+                      {bulkLoading ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Loader2 size={13} className="spin" /> Processing… {bulkRows.length} done</span> : `${bulkRows.length} items classified`}
+                    </div>
+                    {!bulkLoading && bulkRows.length > 0 && (
+                      <button onClick={exportCsv} style={{ display: "inline-flex", alignItems: "center",
