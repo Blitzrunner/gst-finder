@@ -1,75 +1,21 @@
-# Deploying Your GST Finder — Beginner Walkthrough
-
-You'll put the app online in about 20 minutes. No terminal, no coding. Just follow each step in order.
-
-There are 3 stages:
-- **A.** Get the code onto GitHub (a free code-storage site Vercel reads from)
-- **B.** Connect Vercel to that code and add your API key
-- **C.** Go live and test
-
-Keep your Anthropic API key handy. **Never paste it into any file or share it with anyone** — it's like a password for your billing.
-
----
-
-## Stage A — Put the code on GitHub
-
-GitHub stores your code; Vercel reads from it. Both are free.
-
-1. Go to **github.com** and create a free account (or sign in).
-2. Click the **+** icon (top right) → **New repository**.
-3. Name it `gst-finder`. Leave it **Public** (fine for now). Click **Create repository**.
-4. On the next page, click the link **uploading an existing file** (in the line "…or upload an existing file").
-5. **Unzip the project file I gave you** on your computer first (right-click → Extract All). You'll get a folder with files inside.
-6. Drag **all the files and folders from inside** the unzipped folder into the GitHub upload box. (Drag the *contents*, not the outer folder itself — you should see `package.json`, `index.html`, the `src` folder, the `api` folder, etc.)
-7. Wait for them to finish uploading, then click **Commit changes** at the bottom.
-
-Your code is now on GitHub. 
-
----
-
-## Stage B — Connect Vercel & add your key
-
-1. Go to **vercel.com** → **Sign Up** → choose **Continue with GitHub** (easiest — it links the two automatically).
-2. Approve the permissions GitHub asks for.
-3. On your Vercel dashboard, click **Add New… → Project**.
-4. Find `gst-finder` in the list and click **Import**.
-5. Vercel auto-detects it's a Vite app — you don't need to change build settings. **Don't click Deploy yet.**
-6. Expand the **Environment Variables** section. Add one:
-   - **Name:** `ANTHROPIC_API_KEY`
-   - **Value:** paste your Anthropic API key
-   - Click **Add**.
-
-   This is the secure spot for your key — it lives on Vercel's server, never in the public code.
-7. Now click **Deploy**.
-
-Wait 1–2 minutes while it builds.
-
----
-
-## Stage C — Go live & test
-
-1. When it finishes, Vercel shows a **Congratulations** screen with a link like `gst-finder-xxxx.vercel.app`. Click it.
-2. Your app opens. Type **"annual software subscription"** and hit **Find**.
-3. If you get a real code back — **you're live.** Share that link with anyone.
-
----
-
-## If something goes wrong
-
-- **"Lookup unavailable" / error on every search** → the API key probably wasn't saved. In Vercel: **Settings → Environment Variables**, confirm `ANTHROPIC_API_KEY` is there and spelled exactly. After fixing, go to **Deployments → ⋯ → Redeploy**.
-- **Build failed** → usually a file landed in the wrong place. Check that `package.json` is at the top level of the repo (not inside a sub-folder). Re-upload if needed.
-- **Blank page** → make sure the `src` and `api` folders uploaded with their files inside them.
-
----
-
-## What to do after it's live
-
-1. **Buy a domain** (~₹800/yr on Namecheap/GoDaddy) and connect it in Vercel → **Settings → Domains**. A real domain like `gstfinder.in` builds trust vs. a `.vercel.app` link.
-2. **Watch your Anthropic usage** for the first few days at console.anthropic.com to confirm costs are sane.
-3. **Add caching** (next build step) so repeated lookups don't re-bill you.
-
----
-
-## A note on cost & safety
-
-Right now anyone with your link can use it, and every lookup costs you a small API fee. Before you promote it widely, add the **rate-limit + freemium gate** so a single user can't run up your bill. That's the next thing to build — tell me when you're live and I'll set it up.
+{
+  "name": "gst-sac-finder",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.1",
+    "lucide-react": "^0.383.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.3.1"
+  }
+}
